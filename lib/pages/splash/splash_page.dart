@@ -69,7 +69,7 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
     });
 
     // Navigation
-    Timer(const Duration(seconds: 10), () {
+    Timer(const Duration(seconds: 5), () {
       if (!mounted) return;
       _phraseTimer?.cancel();
       Navigator.pushReplacementNamed(context, AppRoutes.login);
@@ -193,8 +193,8 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
                         ],
                       ),
                       child: ClipOval(
-                        child: Image.asset(
-                          'assets/images/splash_logo.png',
+                        child: Image.network(
+                          'https://i.postimg.cc/B68wSPQ9/laptoplogo.png',
                           fit: BoxFit.cover,
                         ),
                       ),

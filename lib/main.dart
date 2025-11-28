@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -21,6 +23,7 @@ import 'pages/search/search_page.dart';
 import 'pages/splash/splash_page.dart';
 
 Future<void> main() async {
+    WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
   options: DefaultFirebaseOptions.currentPlatform,
 );
@@ -307,181 +310,180 @@ class _MainShellState extends State<MainShell> {
   }
 
   Drawer _buildDrawer(BuildContext context) {
-    const primaryRed = Color.fromARGB(255, 173, 0, 35);
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+  final theme = Theme.of(context);
+  final isDark = theme.brightness == Brightness.dark;
+  const primaryRed = Color.fromARGB(255, 173, 0, 35);
 
-    return Drawer(
-      elevation: 0,
+  final currentUser = FirebaseAuth.instance.currentUser;
 
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: -40, end: 0),
-        duration: const Duration(milliseconds: 280),
-        curve: Curves.easeOut,
-        builder: (context, value, child) {
-          final opacity = 1 - (value.abs() / 40); // 0 → 1
+  return Drawer(
+    elevation: 0,
+    child: TweenAnimationBuilder<double>(
+      tween: Tween(begin: -40, end: 0),
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOut,
+      builder: (context, value, child) {
+        final opacity = 1 - (value.abs() / 40);
+        return Transform.translate(
+          offset: Offset(value, 0),
+         child: Opacity(
+  opacity: opacity.clamp(0.0, 1.0),
+  child: child ?? const SizedBox.shrink(), // fallback if child is null
+),
+        );
+      },
+      child: Stack(
+        children: [
+          // Background panel
+          ClipRRect(
+            borderRadius: const BorderRadius.only(
+              topRight: Radius.circular(24),
+              bottomRight: Radius.circular(24),
+            ),
+            child: Container(color: isDark ? Colors.black : Colors.white),
+          ),
 
-          return Transform.translate(
-            offset: Offset(value, 0),
-            child: Opacity(opacity: opacity.clamp(0.0, 1.0), child: child),
-          );
-        },
-
-        // 🔥 Drawer content with blur + curved right side
-        child: Stack(
-          children: [
-            // ---- BLUR & GLASS BACKGROUND PANEL ----
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
+          // Drawer content
+          Container(
+            decoration: const BoxDecoration(
+              borderRadius: BorderRadius.only(
                 topRight: Radius.circular(24),
                 bottomRight: Radius.circular(24),
               ),
-              child: Container(color: (isDark ? Colors.black : Colors.white)),
             ),
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                // Drawer Header with FutureBuilder
+                currentUser == null
+                    ? _guestHeader()
+                    : FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                        future: FirebaseFirestore.instance
+                            .collection('Users')
+                            .doc(currentUser.uid)
+                            .get(),
+                        builder: (context, snapshot) {
+                          String displayName = "Guest User";
+                          String displayEmail = "guest@laptopharbor.com";
 
-            // ---- ACTUAL DRAWER CONTENT ----
-            Container(
-              decoration: const BoxDecoration(
-                borderRadius: BorderRadius.only(
-                  topRight: Radius.circular(24),
-                  bottomRight: Radius.circular(24),
+                          if (snapshot.connectionState ==
+                                  ConnectionState.done &&
+                              snapshot.hasData &&
+                              snapshot.data != null &&
+                              snapshot.data!.exists) {
+                            final data = snapshot.data!.data();
+                            if (data != null) {
+                              displayName = data['fullname'] ?? displayName;
+                              displayEmail = data['email'] ?? displayEmail;
+                            }
+                          }
+
+                          return _userHeader(displayName, displayEmail);
+                        },
+                      ),
+
+                const SizedBox(height: 20),
+
+                // Drawer Tiles
+                _drawerTile(icon: Icons.home_outlined, title: "Home", onTap: () {
+                  Navigator.pop(context);
+                  setState(() => _selectedIndex = 0);
+                }),
+                _drawerTile(icon: Icons.favorite_border, title: "Wishlist", onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const WishlistPage()));
+                }),
+                _drawerTile(icon: Icons.shopping_cart_outlined, title: "Cart", onTap: () {
+                  Navigator.pop(context);
+                  setState(() => _selectedIndex = 1);
+                }),
+                _drawerTile(icon: Icons.receipt_long_outlined, title: "My Orders", onTap: () {
+                  Navigator.pop(context);
+                  setState(() => _selectedIndex = 3);
+                }),
+                _drawerTile(icon: Icons.support_agent_outlined, title: "Support", onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportPage()));
+                }),
+
+                const Divider(height: 30),
+
+                _drawerTile(icon: Icons.settings_outlined, title: "Settings", onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, AppRoutes.settings);
+                }),
+
+                _drawerTile(
+                  icon: Icons.logout,
+                  title: "Logout",
+                  iconColor: Colors.redAccent,
+                  textColor: Colors.redAccent,
+                  onTap: () {
+                    Navigator.pop(context);
+                    FirebaseAuth.instance.signOut();
+                    Navigator.pushReplacementNamed(context, AppRoutes.login);
+                  },
                 ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+// Header for logged-in users
+Widget _userHeader(String name, String email) {
+  const primaryRed = Color.fromARGB(255, 173, 0, 35);
+  return Container(
+    padding: const EdgeInsets.fromLTRB(16, 40, 16, 20),
+    decoration: const BoxDecoration(
+      borderRadius: BorderRadius.only(topRight: Radius.circular(24)),
+      gradient: LinearGradient(
+        colors: [
+          Color.fromARGB(255, 173, 0, 35),
+          Color.fromARGB(255, 120, 0, 25),
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+    ),
+    child: Row(
+      children: [
+        const CircleAvatar(
+          radius: 32,
+          backgroundColor: Colors.white,
+          child: Icon(Icons.person, size: 36, color: primaryRed),
+        ),
+        const SizedBox(width: 16),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              name,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
               ),
-              child: ListView(
-                padding: EdgeInsets.zero,
-                children: [
-                  // 🔥 BEAUTIFUL CUSTOM HEADER
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(16, 40, 16, 20),
-                    decoration: const BoxDecoration(
-                      borderRadius: BorderRadius.only(
-                        topRight: Radius.circular(24),
-                      ),
-                      gradient: LinearGradient(
-                        colors: [
-                          Color.fromARGB(255, 173, 0, 35),
-                          Color.fromARGB(255, 120, 0, 25),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                    ),
-                    child: Row(
-                      children: const [
-                        CircleAvatar(
-                          radius: 32,
-                          backgroundColor: Colors.white,
-                          child: Icon(
-                            Icons.person,
-                            size: 36,
-                            color: primaryRed,
-                          ),
-                        ),
-                        SizedBox(width: 16),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "Guest User",
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                            SizedBox(height: 4),
-                            Text(
-                              "guest@laptopharbor.com",
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.white70,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  SizedBox(height: 20.0),
-
-                  // 🔥 DRAWER MENU TILES
-                  _drawerTile(
-                    icon: Icons.home_outlined,
-                    title: "Home",
-                    onTap: () {
-                      Navigator.pop(context);
-                      setState(() => _selectedIndex = 0);
-                    },
-                  ),
-                  _drawerTile(
-                    icon: Icons.favorite_border,
-                    title: "Wishlist",
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const WishlistPage()),
-                      );
-                    },
-                  ),
-                  _drawerTile(
-                    icon: Icons.shopping_cart_outlined,
-                    title: "Cart",
-                    onTap: () {
-                      Navigator.pop(context);
-                      setState(() => _selectedIndex = 1);
-                    },
-                  ),
-                  _drawerTile(
-                    icon: Icons.receipt_long_outlined,
-                    title: "My Orders",
-                    onTap: () {
-                      Navigator.pop(context);
-                      setState(() => _selectedIndex = 3);
-                    },
-                  ),
-                  _drawerTile(
-                    icon: Icons.support_agent_outlined,
-                    title: "Support",
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const SupportPage()),
-                      );
-                    },
-                  ),
-
-                  const Divider(height: 30),
-
-                  _drawerTile(
-                    icon: Icons.settings_outlined,
-                    title: "Settings",
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.pushNamed(context, AppRoutes.settings);
-                    },
-                  ),
-
-                  _drawerTile(
-                    icon: Icons.logout,
-                    title: "Logout",
-                    iconColor: Colors.redAccent,
-                    textColor: Colors.redAccent,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.pushReplacementNamed(context, AppRoutes.login);
-                    },
-                  ),
-                ],
-              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              email,
+              style: const TextStyle(fontSize: 13, color: Colors.white70),
             ),
           ],
         ),
-      ),
-    );
-  }
+      ],
+    ),
+  );
+}
+
+// Header for guests
+Widget _guestHeader() {
+  return _userHeader("Guest User", "guest@laptopharbor.com");
+}
 
   // 🔧 Helper function for Drawer Tiles
   Widget _drawerTile({
