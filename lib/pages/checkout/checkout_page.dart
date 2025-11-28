@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:laptor_harbor/post/orders.dart';
+import 'package:laptor_harbor/services/cart_service.dart';
+import 'package:laptor_harbor/services/order_service.dart';
 
 class CheckoutPage extends StatefulWidget {
   const CheckoutPage({super.key});
@@ -17,6 +20,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
     billingController.dispose();
     super.dispose();
   }
+
+  double get itemsTotal {
+    return CartService.instance.getCartItems().fold(
+        0, (sum, item) => sum + (item.price * item.quantity));
+  }
+
+  double get tax => itemsTotal * 0.03; // e.g., 3% tax
+  double get grandTotal => itemsTotal + tax;
 
   @override
   Widget build(BuildContext context) {
@@ -131,16 +142,28 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 ],
               ),
               child: Column(
-                children: const [
-                  _SummaryRow(label: 'Items total', value: '\$2,098'),
-                  SizedBox(height: 6),
+                children: [
+                  ...CartService.instance.getCartItems().map(
+                    (item) => Column(
+                      children: [
+                        _SummaryRow(
+                          label:
+                              '${item.name} x${item.quantity}',
+                          value: '\$${(item.price * item.quantity).toStringAsFixed(0)}',
+                        ),
+                        const SizedBox(height: 6),
+                      ],
+                    ),
+                  ),
+                  _SummaryRow(label: 'Items total', value: '\$${itemsTotal.toStringAsFixed(0)}'),
+                  const SizedBox(height: 6),
                   _SummaryRow(label: 'Shipping', value: 'Free'),
-                  SizedBox(height: 6),
-                  _SummaryRow(label: 'Tax', value: '\$70'),
-                  Divider(height: 20),
+                  const SizedBox(height: 6),
+                  _SummaryRow(label: 'Tax', value: '\$${tax.toStringAsFixed(0)}'),
+                  const Divider(height: 20),
                   _SummaryRow(
                     label: 'Grand Total',
-                    value: '\$2,168',
+                    value: '\$${grandTotal.toStringAsFixed(0)}',
                     isBold: true,
                   ),
                 ],
@@ -154,21 +177,33 @@ class _CheckoutPageState extends State<CheckoutPage> {
               width: double.infinity,
               child: GestureDetector(
                 onTap: () {
-                  // TODO: Add real place order logic
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Order placed (demo)'),
-                      duration: Duration(seconds: 1),
+                  final newOrder = OrderModel(
+                    orderId: DateTime.now().millisecondsSinceEpoch.toString(),
+                    items: CartService.instance.getCartItems(),
+                    total: CartService.instance.getCartItems().fold(
+                      0,
+                      (sum, p) => sum + (p.price * p.quantity),
                     ),
+                    status: 'Processing',
+                    createdAt: DateTime.now(),
                   );
+
+                  OrderService.instance.addOrder(newOrder);
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Order placed successfully')),
+                  );
+
+                  // Optionally clear cart after placing order
+                  // CartService.instance.clear();
                 },
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [
-                        Color.fromARGB(255, 173, 0, 35), // dark pink-red
-                        Color.fromARGB(255, 110, 2, 18), // deep red
+                        Color.fromARGB(255, 173, 0, 35),
+                        Color.fromARGB(255, 110, 2, 18),
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,

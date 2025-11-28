@@ -1,5 +1,7 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:laptor_harbor/firebase_options.dart';
 import 'package:laptor_harbor/pages/home/accesories_laptop.dart';
 
 import 'routes/app_routes.dart';
@@ -18,7 +20,10 @@ import 'pages/auth/register_page.dart';
 import 'pages/search/search_page.dart';
 import 'pages/splash/splash_page.dart';
 
-void main() {
+Future<void> main() async {
+  await Firebase.initializeApp(
+  options: DefaultFirebaseOptions.currentPlatform,
+);
   runApp(const LaptopHarborApp());
 }
 
@@ -245,7 +250,7 @@ class _MainShellState extends State<MainShell> {
           ),
         );
       case 1:
-        return const KeyedSubtree(key: ValueKey('cart'), child: CartPage());
+        return KeyedSubtree(key: ValueKey('cart'), child: CartPage());
       case 2:
         return const KeyedSubtree(
           key: ValueKey('profile'),

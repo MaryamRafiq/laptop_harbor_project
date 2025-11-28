@@ -1,4 +1,7 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:laptor_harbor/post/posts.dart';
+import 'package:laptor_harbor/services/cart_service.dart';
 import '../product/product_details_page.dart';
 
 class BusinessLaptopsPage extends StatelessWidget {
@@ -6,77 +9,69 @@ class BusinessLaptopsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List<Map<String, dynamic>> laptops = [
-      {
-        'name': 'Lenovo ThinkPad X1',
-        'spec': 'i7 • 16GB • 1TB SSD',
-        'price': '\$1,999',
-        'rating': 4.9,
-      },
-      {
-        'name': 'HP EliteBook',
-        'spec': 'i5 • 8GB • 512GB SSD',
-        'price': '\$1,299',
-        'rating': 4.4,
-      },
-      {
-        'name': 'Dell Latitude 7420',
-        'spec': 'i7 • 16GB • 512GB SSD',
-        'price': '\$1,499',
-        'rating': 4.6,
-      },
-      {
-        'name': 'Asus ExpertBook B9',
-        'spec': 'i7 • 16GB • 1TB SSD',
-        'price': '\$1,899',
-        'rating': 4.7,
-      },
-      {
-        'name': 'Lenovo ThinkPad X1',
-        'spec': 'i7 • 16GB • 1TB SSD',
-        'price': '\$1,999',
-        'rating': 4.9,
-      },
-      {
-        'name': 'HP EliteBook',
-        'spec': 'i5 • 8GB • 512GB SSD',
-        'price': '\$1,299',
-        'rating': 4.4,
-      },
-    ];
+    return StreamBuilder(
+      stream: FirebaseFirestore.instance
+          .collection("posts")
+          .where("category", isEqualTo: "business")
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-    return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      itemCount: laptops.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: 0.7, // match others
-      ),
-      itemBuilder: (context, index) {
-        final l = laptops[index];
+        final docs = snapshot.data!.docs;
 
-        return BusinessLaptopCard(
-          name: l['name'] as String,
-          spec: l['spec'] as String,
-          price: l['price'] as String,
-          rating: (l['rating'] as num).toDouble(),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) =>
-                    ProductDetailsPage(productName: l['name'] as String),
-              ),
-            );
-          },
-          onAddToCart: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('${l['name']} added to cart'),
-                duration: const Duration(seconds: 1),
-              ),
+        return GridView.builder(
+          padding: const EdgeInsets.all(12),
+          itemCount: docs.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: 0.7,
+          ),
+          itemBuilder: (context, index) {
+            final data = docs[index].data() as Map<String, dynamic>;
+            final priceValue = (data['price'] ?? 0)
+                .toDouble(); // Firestore price → double
+
+            return BusinessLaptopCard(
+              image: data['image'] ?? '',
+              name: data['name'] ?? '',
+              spec: data['specification'] ?? '',
+              price: priceValue,
+              rating: (data['rating'] ?? '0').toString(),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        ProductDetailsPage(productName: data['name']),
+                  ),
+                );
+              },
+              onAddToCart: () {
+                final post = Post(
+                  name: data['name'] ?? '',
+                  specification: data['specification'] ?? '',
+                  price: priceValue,
+                  rating: (data['rating'] ?? '0').toString(),
+                  image: data['image'] ?? '',
+                  configuration: data['configuration'] ?? '',
+                  description: data['description'] ?? '',
+                  category: data['category'] ?? 'business',
+                  quantity: 1,
+                );
+
+                CartService.instance.addItem(post);
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('${data['name']} added to cart'),
+                    duration: const Duration(seconds: 1),
+                  ),
+                );
+              },
             );
           },
         );
@@ -88,8 +83,9 @@ class BusinessLaptopsPage extends StatelessWidget {
 class BusinessLaptopCard extends StatefulWidget {
   final String name;
   final String spec;
-  final String price;
-  final double rating;
+  final double price; // now double
+  final String rating;
+  final String image;
   final VoidCallback? onTap;
   final VoidCallback? onAddToCart;
 
@@ -99,6 +95,7 @@ class BusinessLaptopCard extends StatefulWidget {
     required this.spec,
     required this.price,
     required this.rating,
+    required this.image,
     this.onTap,
     this.onAddToCart,
   });
@@ -111,17 +108,8 @@ class _BusinessLaptopCardState extends State<BusinessLaptopCard> {
   bool _pressed = false;
   bool _isFavorite = false;
 
-  void _setPressed(bool value) {
-    setState(() {
-      _pressed = value;
-    });
-  }
-
-  void _toggleFavorite() {
-    setState(() {
-      _isFavorite = !_isFavorite;
-    });
-  }
+  void _setPressed(bool value) => setState(() => _pressed = value);
+  void _toggleFavorite() => setState(() => _isFavorite = !_isFavorite);
 
   @override
   Widget build(BuildContext context) {
@@ -139,7 +127,7 @@ class _BusinessLaptopCardState extends State<BusinessLaptopCard> {
         child: Container(
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFF22c55e), Color(0xFF0ea5e9)], // green → cyan
+              colors: [Color(0xFF22c55e), Color(0xFF0ea5e9)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -207,10 +195,18 @@ class _BusinessLaptopCardState extends State<BusinessLaptopCard> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   alignment: Alignment.center,
-                  child: const Icon(
-                    Icons.work_outline,
-                    color: Colors.green,
-                    size: 42,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      widget.image,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.broken_image,
+                        size: 40,
+                        color: Colors.grey,
+                      ),
+                    ),
                   ),
                 ),
 
@@ -244,10 +240,7 @@ class _BusinessLaptopCardState extends State<BusinessLaptopCard> {
                   children: [
                     Icon(Icons.star, size: 16, color: Colors.amber.shade700),
                     const SizedBox(width: 4),
-                    Text(
-                      widget.rating.toStringAsFixed(1),
-                      style: const TextStyle(fontSize: 12),
-                    ),
+                    Text(widget.rating, style: const TextStyle(fontSize: 12)),
                     const SizedBox(width: 8),
                     const Text('•', style: TextStyle(fontSize: 12)),
                     const SizedBox(width: 3),
@@ -265,7 +258,7 @@ class _BusinessLaptopCardState extends State<BusinessLaptopCard> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      widget.price,
+                      '\$${widget.price.toStringAsFixed(0)}',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,

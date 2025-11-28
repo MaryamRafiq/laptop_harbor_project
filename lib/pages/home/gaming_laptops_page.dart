@@ -1,4 +1,7 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:laptor_harbor/post/posts.dart';
+import 'package:laptor_harbor/services/cart_service.dart';
 import '../product/product_details_page.dart';
 
 class GamingLaptopsPage extends StatelessWidget {
@@ -6,77 +9,69 @@ class GamingLaptopsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List<Map<String, dynamic>> laptops = [
-      {
-        'name': 'Acer Nitro 5',
-        'spec': 'i7 • 16GB • RTX 3060',
-        'price': '\$1,299',
-        'rating': 4.6,
-      },
-      {
-        'name': 'Asus ROG Strix',
-        'spec': 'Ryzen 7 • 16GB • RTX 4070',
-        'price': '\$1,799',
-        'rating': 4.8,
-      },
-      {
-        'name': 'MSI Katana GF66',
-        'spec': 'i7 • 16GB • RTX 3050Ti',
-        'price': '\$1,499',
-        'rating': 4.5,
-      },
-      {
-        'name': 'Dell G15 Gaming',
-        'spec': 'Ryzen 7 • 16GB • RTX 4060',
-        'price': '\$1,699',
-        'rating': 4.7,
-      },
-      {
-        'name': 'Acer Nitro 5',
-        'spec': 'i7 • 16GB • RTX 3060',
-        'price': '\$1,299',
-        'rating': 4.6,
-      },
-      {
-        'name': 'Asus ROG Strix',
-        'spec': 'Ryzen 7 • 16GB • RTX 4070',
-        'price': '\$1,799',
-        'rating': 4.8,
-      },
-    ];
+    return StreamBuilder(
+      stream: FirebaseFirestore.instance
+          .collection("posts")
+          .where("category", isEqualTo: "gaming")
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-    return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      itemCount: laptops.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2, // two cards per row
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: 0.7, // 👈 taller cards to avoid overflow
-      ),
-      itemBuilder: (context, index) {
-        final l = laptops[index];
+        final docs = snapshot.data!.docs;
 
-        return GamingLaptopCard(
-          name: l['name'] as String,
-          spec: l['spec'] as String,
-          price: l['price'] as String,
-          rating: (l['rating'] as num).toDouble(),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) =>
-                    ProductDetailsPage(productName: l['name'] as String),
-              ),
-            );
-          },
-          onAddToCart: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('${l['name']} added to cart'),
-                duration: const Duration(seconds: 1),
-              ),
+        return GridView.builder(
+          padding: const EdgeInsets.all(12),
+          itemCount: docs.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: 0.7,
+          ),
+          itemBuilder: (context, index) {
+            final data = docs[index].data() as Map<String, dynamic>;
+            final priceValue = (data['price'] ?? 0)
+                .toDouble(); // Firestore → double safely
+
+            return GamingLaptopCard(
+              image: data['image'] ?? '',
+              name: data['name'] ?? '',
+              spec: data['specification'] ?? '',
+              price: priceValue,
+              rating: (data['rating'] ?? '0').toString(),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        ProductDetailsPage(productName: data['name']),
+                  ),
+                );
+              },
+              onAddToCart: () {
+                final post = Post(
+                  name: data['name'] ?? '',
+                  specification: data['specification'] ?? '',
+                  price: priceValue,
+                  rating: (data['rating'] ?? '0').toString(),
+                  image: data['image'] ?? '',
+                  configuration: data['configuration'] ?? '',
+                  description: data['description'] ?? '',
+                  category: data['category'] ?? 'gaming',
+                  quantity: 1,
+                );
+
+                CartService.instance.addItem(post);
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('${data['name']} added to cart'),
+                    duration: const Duration(seconds: 1),
+                  ),
+                );
+              },
             );
           },
         );
@@ -88,8 +83,9 @@ class GamingLaptopsPage extends StatelessWidget {
 class GamingLaptopCard extends StatefulWidget {
   final String name;
   final String spec;
-  final String price;
-  final double rating;
+  final double price; // now double
+  final String rating;
+  final String image;
   final VoidCallback? onTap;
   final VoidCallback? onAddToCart;
 
@@ -99,6 +95,7 @@ class GamingLaptopCard extends StatefulWidget {
     required this.spec,
     required this.price,
     required this.rating,
+    required this.image,
     this.onTap,
     this.onAddToCart,
   });
@@ -111,17 +108,8 @@ class _GamingLaptopCardState extends State<GamingLaptopCard> {
   bool _pressed = false;
   bool _isFavorite = false;
 
-  void _setPressed(bool value) {
-    setState(() {
-      _pressed = value;
-    });
-  }
-
-  void _toggleFavorite() {
-    setState(() {
-      _isFavorite = !_isFavorite;
-    });
-  }
+  void _setPressed(bool value) => setState(() => _pressed = value);
+  void _toggleFavorite() => setState(() => _isFavorite = !_isFavorite);
 
   @override
   Widget build(BuildContext context) {
@@ -139,13 +127,13 @@ class _GamingLaptopCardState extends State<GamingLaptopCard> {
         child: Container(
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFFec4899), Color(0xFF6366f1)], // pink → indigo
+              colors: [Color(0xFFec4899), Color(0xFF6366f1)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(16),
           ),
-          padding: const EdgeInsets.all(1.5), // neon border thickness
+          padding: const EdgeInsets.all(1.5),
           child: Container(
             decoration: BoxDecoration(
               color: cardColor,
@@ -207,10 +195,18 @@ class _GamingLaptopCardState extends State<GamingLaptopCard> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   alignment: Alignment.center,
-                  child: const Icon(
-                    Icons.computer,
-                    color: Colors.redAccent,
-                    size: 42,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      widget.image,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.broken_image,
+                        size: 40,
+                        color: Colors.grey,
+                      ),
+                    ),
                   ),
                 ),
 
@@ -244,10 +240,7 @@ class _GamingLaptopCardState extends State<GamingLaptopCard> {
                   children: [
                     Icon(Icons.star, size: 16, color: Colors.amber.shade700),
                     const SizedBox(width: 4),
-                    Text(
-                      widget.rating.toStringAsFixed(1),
-                      style: const TextStyle(fontSize: 12),
-                    ),
+                    Text(widget.rating, style: const TextStyle(fontSize: 12)),
                     const SizedBox(width: 8),
                     const Text('•', style: TextStyle(fontSize: 12)),
                     const SizedBox(width: 4),
@@ -262,7 +255,7 @@ class _GamingLaptopCardState extends State<GamingLaptopCard> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      widget.price,
+                      '\$${widget.price.toStringAsFixed(0)}',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,

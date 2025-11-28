@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:laptor_harbor/post/posts.dart';
+import 'package:laptor_harbor/services/cart_service.dart';
 import '../product/product_details_page.dart';
 
 class AllLaptopsPage extends StatelessWidget {
@@ -7,45 +10,6 @@ class AllLaptopsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List<Map<String, dynamic>> laptops = [
-      {
-        'name': 'Dell Inspiron 15',
-        'spec': 'i5 • 8GB • 512GB SSD',
-        'price': '\$899',
-        'rating': 4.5,
-      },
-      {
-        'name': 'HP Pavilion Gaming',
-        'spec': 'i7 • 16GB • RTX 3050',
-        'price': '\$1,199',
-        'rating': 4.6,
-      },
-      {
-        'name': 'MacBook Air M2',
-        'spec': 'M2 • 8GB • 256GB SSD',
-        'price': '\$1,299',
-        'rating': 4.8,
-      },
-      {
-        'name': 'Acer Swift 5',
-        'spec': 'i5 • 16GB • 512GB SSD',
-        'price': '\$1,099',
-        'rating': 4.4,
-      },
-      {
-        'name': 'MacBook Air M2',
-        'spec': 'M2 • 8GB • 256GB SSD',
-        'price': '\$1,299',
-        'rating': 4.8,
-      },
-      {
-        'name': 'Acer Swift 5',
-        'spec': 'i5 • 16GB • 512GB SSD',
-        'price': '\$1,099',
-        'rating': 4.4,
-      },
-    ];
-
     return Column(
       children: [
         const SizedBox(height: 10),
@@ -59,38 +23,66 @@ class AllLaptopsPage extends StatelessWidget {
         const SizedBox(height: 10),
 
         Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.all(12),
-            itemCount: laptops.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 0.7,
-            ),
-            itemBuilder: (context, index) {
-              final l = laptops[index];
+          child: StreamBuilder(
+            stream: FirebaseFirestore.instance.collection("posts").snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-              return AllLaptopCard(
-                name: l['name'],
-                spec: l['spec'],
-                price: l['price'],
-                rating: (l['rating'] as num).toDouble(),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          ProductDetailsPage(productName: l['name']),
-                    ),
-                  );
-                },
-                onAddToCart: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('${l['name']} added to cart'),
-                      duration: const Duration(seconds: 1),
-                    ),
+              final docs = snapshot.data!.docs;
+
+              return GridView.builder(
+                padding: const EdgeInsets.all(12),
+                itemCount: docs.length,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 0.7,
+                ),
+                itemBuilder: (context, index) {
+                  final data = docs[index].data() as Map<String, dynamic>;
+                  final priceValue = (data['price'] ?? 0)
+                      .toDouble(); // convert Firestore double safely
+
+                  return AllLaptopCard(
+                    image: data['image'] ?? '',
+                    name: data['name'] ?? '',
+                    specification: data['specification'] ?? '',
+                    price: priceValue, // pass as double
+                    rating: (data['rating'] ?? '0').toString(),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              ProductDetailsPage(productName: data['name']),
+                        ),
+                      );
+                    },
+                    onAddToCart: () {
+                      final post = Post(
+                        name: data['name'] ?? '',
+                        specification: data['specification'] ?? '',
+                        price: priceValue,
+                        rating: (data['rating'] ?? '0').toString(),
+                        image: data['image'] ?? '',
+                        configuration: data['configuration'] ?? '',
+                        description: data['description'] ?? '',
+                        category: data['category'] ?? 'laptop',
+                        quantity: 1,
+                      );
+
+                      CartService.instance.addItem(post);
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('${data['name']} added to cart'),
+                          duration: const Duration(seconds: 1),
+                        ),
+                      );
+                    },
                   );
                 },
               );
@@ -122,16 +114,19 @@ class _AutoImageSliderState extends State<_AutoImageSlider> {
       'title': 'Best Deals on Laptops',
       'subtitle': 'Gaming • Work • Student',
       'colors': [Color(0xFF0ea5e9), Color(0xFF6366f1)],
+      'image': 'assets/images/gaminglaptop.jfif',
     },
     {
       'title': 'Powerful Gaming Rigs',
       'subtitle': 'RTX • High Refresh Rate',
       'colors': [Color(0xFF22c55e), Color(0xFF16a34a)],
+      'image': 'assets/images/slide2.jfif',
     },
     {
       'title': 'Ultrabooks & Productivity',
       'subtitle': 'Lightweight • Long Battery',
       'colors': [Color(0xFFf97316), Color(0xFFdb2777)],
+      'image': 'assets/images/slide3.jfif',
     },
   ];
 
@@ -247,10 +242,9 @@ class _AutoImageSliderState extends State<_AutoImageSlider> {
                         color: Colors.white.withOpacity(isDark ? 0.18 : 0.24),
                         borderRadius: BorderRadius.circular(18),
                       ),
-                      child: const Icon(
-                        Icons.laptop_mac,
-                        color: Colors.white,
-                        size: 60,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.asset(slide['image'], fit: BoxFit.cover),
                       ),
                     ),
                   ],
@@ -290,18 +284,20 @@ class _AutoImageSliderState extends State<_AutoImageSlider> {
 /// ---------------------------------------------------------------------------
 class AllLaptopCard extends StatefulWidget {
   final String name;
-  final String spec;
-  final String price;
-  final double rating;
+  final String specification;
+  final double price; // <- now a double
+  final String rating;
+  final String image;
   final VoidCallback? onTap;
   final VoidCallback? onAddToCart;
 
   const AllLaptopCard({
     super.key,
     required this.name,
-    required this.spec,
-    required this.price,
+    required this.specification,
+    required this.price, // double
     required this.rating,
+    required this.image,
     this.onTap,
     this.onAddToCart,
   });
@@ -400,10 +396,18 @@ class _AllLaptopCardState extends State<AllLaptopCard> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   alignment: Alignment.center,
-                  child: const Icon(
-                    Icons.laptop_mac,
-                    color: Colors.blueAccent,
-                    size: 42,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      widget.image,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.broken_image,
+                        size: 40,
+                        color: Colors.grey,
+                      ),
+                    ),
                   ),
                 ),
 
@@ -424,7 +428,7 @@ class _AllLaptopCardState extends State<AllLaptopCard> {
 
                 // specs
                 Text(
-                  widget.spec,
+                  widget.specification,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: Colors.grey[600], fontSize: 12),
@@ -437,10 +441,7 @@ class _AllLaptopCardState extends State<AllLaptopCard> {
                   children: [
                     Icon(Icons.star, size: 16, color: Colors.amber.shade700),
                     const SizedBox(width: 4),
-                    Text(
-                      widget.rating.toStringAsFixed(1),
-                      style: const TextStyle(fontSize: 12),
-                    ),
+                    Text(widget.rating, style: const TextStyle(fontSize: 12)),
                     const SizedBox(width: 8),
                     const Text('•', style: TextStyle(fontSize: 12)),
                     const SizedBox(width: 4),
@@ -455,7 +456,7 @@ class _AllLaptopCardState extends State<AllLaptopCard> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      widget.price,
+                      '\$${widget.price.toStringAsFixed(0)}', // display price
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,

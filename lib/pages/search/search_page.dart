@@ -1,4 +1,6 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:laptor_harbor/post/posts.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -15,9 +17,93 @@ class _SearchPageState extends State<SearchPage> {
     'All',
     'Gaming',
     'Business',
-    'Budget < \$1000',
-    '16GB RAM',
+    'Accessories',
   ];
+
+  Widget _buildSearchResults(ThemeData theme) {
+  return StreamBuilder<List<Post>>(
+    stream: _searchProducts(),
+    builder: (context, snapshot) {
+      if (!snapshot.hasData) {
+        return const Center(child: CircularProgressIndicator());
+      }
+
+      final results = snapshot.data!;
+
+      if (results.isEmpty) {
+        return const Center(
+          child: Text(
+            "No results found",
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+        );
+      }
+
+      return ListView.builder(
+        padding: const EdgeInsets.only(top: 10),
+        itemCount: results.length,
+        itemBuilder: (context, index) {
+          final post = results[index];
+
+          return ListTile(
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(
+                post.image,
+                width: 55,
+                height: 55,
+                fit: BoxFit.cover,
+              ),
+            ),
+            title: Text(post.name),
+            subtitle: Text(post.specification),
+            trailing: Text("\$${post.price}"),
+            onTap: () {
+              // Navigate to product detail
+            },
+          );
+        },
+      );
+    },
+  );
+}
+
+
+  Stream<List<Post>> _searchProducts() {
+  final queryText = _controller.text.trim().toLowerCase();
+  final selectedFilter = _filters[_selectedFilterIndex];
+
+  // Base collection reference
+  Query<Map<String, dynamic>> query =
+      FirebaseFirestore.instance.collection("posts");
+
+  // Filter by category if NOT "All"
+  if (selectedFilter != "All") {
+    query = query.where("category", isEqualTo: selectedFilter.toLowerCase());
+  }
+
+  // Return full list if user hasn't typed anything
+  if (queryText.isEmpty) {
+    return query.snapshots().map(
+      (snapshot) =>
+          snapshot.docs.map((doc) => Post.fromMap(doc.data())).toList(),
+    );
+  }
+
+  // 🔍 Search by name, spec, configuration, description
+  return query.snapshots().map(
+    (snapshot) => snapshot.docs
+        .map((doc) => Post.fromMap(doc.data()))
+        .where((post) {
+          return post.name.toLowerCase().contains(queryText) ||
+              post.specification.toLowerCase().contains(queryText) ||
+              post.configuration.toLowerCase().contains(queryText) ||
+              post.description.toLowerCase().contains(queryText);
+        })
+        .toList(),
+  );
+}
+
 
   @override
   void dispose() {
@@ -128,7 +214,7 @@ class _SearchPageState extends State<SearchPage> {
             const SizedBox(height: 20),
 
             // --------- RESULTS / EMPTY STATE ----------
-            Expanded(child: _buildEmptyState(theme, primary)),
+            Expanded(child: _buildSearchResults(theme)),
           ],
         ),
       ),

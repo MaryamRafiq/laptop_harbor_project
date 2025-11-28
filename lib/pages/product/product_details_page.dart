@@ -1,4 +1,7 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:laptor_harbor/post/posts.dart';
 
 class ProductDetailsPage extends StatefulWidget {
   final String productName;
@@ -10,22 +13,57 @@ class ProductDetailsPage extends StatefulWidget {
 }
 
 class _ProductDetailsPageState extends State<ProductDetailsPage> {
-  String _selectedConfig = '16GB / 512GB SSD';
-  String _selectedColor = 'Space Grey';
+  Post? product;
+  List<Post> recommendedProducts = [];
+  String _selectedConfig = '';
 
-  final List<String> _configs = [
-    '8GB / 256GB SSD',
-    '16GB / 512GB SSD',
-    '16GB / 1TB SSD',
-  ];
 
-  final List<String> _colors = ['Silver', 'Space Grey', 'Black'];
+  @override
+  void initState() {
+    super.initState();
+    fetchProduct();
+  }
 
-  final List<Map<String, dynamic>> _recommended = [
-    {'name': 'Acer Swift 5', 'price': 1099.0},
-    {'name': 'HP Pavilion Gaming', 'price': 1199.0},
-    {'name': 'Lenovo ThinkPad X1', 'price': 1999.0},
-  ];
+  Future<void> fetchProduct() async {
+    final query = await FirebaseFirestore.instance
+        .collection('posts')
+        .where('name', isEqualTo: widget.productName)
+        .get();
+
+    if (query.docs.isNotEmpty) {
+      final data = query.docs.first.data();
+      final fetchedProduct = Post.fromMap(data);
+
+      // Split configurations if stored as comma-separated string
+      final configs = fetchedProduct.configuration
+          .split(',')
+          .map((e) => e.trim())
+          .toList();
+
+      setState(() {
+        product = fetchedProduct;
+        if (configs.isNotEmpty) _selectedConfig = configs[0];
+      });
+
+      fetchRecommended(fetchedProduct.category, fetchedProduct.name);
+    }
+  }
+
+  Future<void> fetchRecommended(String category, String excludeName) async {
+    final query = await FirebaseFirestore.instance
+        .collection('posts')
+        .where('category', isEqualTo: category)
+        .get();
+
+    final products = query.docs
+        .map((doc) => Post.fromMap(doc.data()))
+        .where((p) => p.name != excludeName)
+        .toList();
+
+    setState(() {
+      recommendedProducts = products;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,11 +71,19 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
     final primary = theme.colorScheme.primary;
     final isDark = theme.brightness == Brightness.dark;
 
-    const price = 1299.0;
-    const rating = 4.7;
+    if (product == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final configs = product!.configuration
+        .split(',')
+        .map((e) => e.trim())
+        .toList();
+    final price = (product!.price);
+    final rating = (product!.rating);
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.productName)),
+      appBar: AppBar(title: Text(product!.name)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -65,10 +111,19 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
             child: Stack(
               children: [
                 Center(
-                  child: Icon(
-                    Icons.laptop_mac,
-                    size: 80,
-                    color: Colors.white.withOpacity(0.95),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      product!.image,
+                      height: 220,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.broken_image,
+                        size: 40,
+                        color: Colors.grey,
+                      ),
+                    ),
                   ),
                 ),
                 Positioned(
@@ -116,7 +171,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
             children: [
               Expanded(
                 child: Text(
-                  widget.productName,
+                  product!.name,
                   style: const TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 20,
@@ -139,7 +194,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
           Row(
             children: [
               Text(
-                '\$${price.toStringAsFixed(0)}',
+                '\$${product!.price.toStringAsFixed(0)}', // convert to string
                 style: TextStyle(
                   color: primary,
                   fontWeight: FontWeight.bold,
@@ -180,9 +235,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
 
           const SizedBox(height: 18),
 
-          // ==============================================================
-          // 🔥 CONFIGURATION (UPDATED CHIP)
-          // ==============================================================
+          // ---------- CONFIGURATION ----------
           Text(
             'Configuration',
             style: theme.textTheme.titleSmall?.copyWith(
@@ -194,54 +247,13 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
           Wrap(
             spacing: 8,
             runSpacing: 6,
-            children: _configs.map((c) {
+            children: configs.map((c) {
               final selected = _selectedConfig == c;
               return ChoiceChip(
                 selected: selected,
                 showCheckmark: true,
-                checkmarkColor: Colors.black, // ALWAYS BLACK
-                selectedColor: primary, // ALWAYS RED CHIP
-                backgroundColor: isDark ? Colors.grey[850] : Colors.grey[200],
-                side: BorderSide(color: selected ? primary : Colors.grey),
-                label: Text(
-                  c,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w500,
-                    color: selected
-                        ? Colors
-                              .black // ALWAYS BLACK SELECTED TEXT
-                        : (isDark ? Colors.grey[200] : Colors.grey[800]),
-                  ),
-                ),
-                onSelected: (_) => setState(() => _selectedConfig = c),
-              );
-            }).toList(),
-          ),
-
-          const SizedBox(height: 16),
-
-          // ==============================================================
-          // 🔥 COLOR (UPDATED CHIP)
-          // ==============================================================
-          Text(
-            'Color',
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: _colors.map((c) {
-              final selected = _selectedColor == c;
-              return ChoiceChip(
-                selected: selected,
-                showCheckmark: true,
-                checkmarkColor: Colors.black, // ALWAYS BLACK
-                selectedColor: primary, // ALWAYS RED CHIP
+                checkmarkColor: Colors.black,
+                selectedColor: primary,
                 backgroundColor: isDark ? Colors.grey[850] : Colors.grey[200],
                 side: BorderSide(color: selected ? primary : Colors.grey),
                 label: Text(
@@ -254,7 +266,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                         : (isDark ? Colors.grey[200] : Colors.grey[800]),
                   ),
                 ),
-                onSelected: (_) => setState(() => _selectedColor = c),
+                onSelected: (_) => setState(() => _selectedConfig = c),
               );
             }).toList(),
           ),
@@ -267,7 +279,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
           const SizedBox(height: 22),
 
           // ---------- DESCRIPTION ----------
-          _buildDescription(theme),
+          _buildDescription(theme, product!.description),
 
           const SizedBox(height: 22),
 
@@ -282,35 +294,37 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
           const SizedBox(height: 24),
 
           // ---------- YOU MAY ALSO LIKE ----------
-          Text(
-            'You may also like',
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
+          if (recommendedProducts.isNotEmpty) ...[
+            Text(
+              'You may also like',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            height: 140,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: _recommended.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
-              itemBuilder: (context, index) {
-                final item = _recommended[index];
-                return _buildRecommendedCard(
-                  context,
-                  name: item['name'],
-                  price: item['price'],
-                );
-              },
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 140,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: recommendedProducts.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 10),
+                itemBuilder: (context, index) {
+                  final item = recommendedProducts[index];
+                  final recPrice = (item.price) ?? 0.0;
+                  return _buildRecommendedCard(
+                    context,
+                    name: item.name,
+                    price: item.price, // now it's double
+                    imageUrl: item.image,
+                  );
+                },
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
   }
-
-  // -------------------------------------------------------------------
 
   Widget _buildSpecs(ThemeData theme, bool isDark, Color primary) {
     return Container(
@@ -328,17 +342,22 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          Text(
+        children: [
+          const Text(
             'Key Specifications',
             style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            product!.specification,
+            style: const TextStyle(fontSize: 13, height: 1.4),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDescription(ThemeData theme) {
+  Widget _buildDescription(ThemeData theme, String description) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -352,18 +371,15 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
           ),
         ],
       ),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          const Text(
             'Description',
             style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
           ),
-          SizedBox(height: 8),
-          Text(
-            'Experience powerful performance...',
-            style: TextStyle(fontSize: 13, height: 1.4),
-          ),
+          const SizedBox(height: 8),
+          Text(description, style: const TextStyle(fontSize: 13, height: 1.4)),
         ],
       ),
     );
@@ -408,31 +424,86 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   }
 
   Widget _buildWishlistButton(Color primary, bool isDark) {
+  if (product == null) return const SizedBox();
+
+  final user = FirebaseAuth.instance.currentUser;
+
+  if (user == null) {
     return OutlinedButton.icon(
-      icon: Icon(
-        Icons.favorite_border,
-        color: isDark ? Colors.pink[200] : primary,
-      ),
+      icon: Icon(Icons.favorite_border, color: isDark ? Colors.pink[200] : primary),
       label: Text(
         'Add to Wishlist',
-        style: TextStyle(
-          fontWeight: FontWeight.w600,
-          color: isDark ? Colors.grey[100] : primary,
-        ),
+        style: TextStyle(color: isDark ? Colors.grey[100] : primary),
       ),
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        side: BorderSide(color: primary.withOpacity(0.7), width: 1.2),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      ),
-      onPressed: () {},
+      onPressed: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Login required')),
+        );
+      },
     );
   }
+
+  final userId = user.uid;
+
+  final wishlistRef = FirebaseFirestore.instance
+      .collection('wishlist')
+      .doc(userId)
+      .collection('items')
+      .doc(product!.name); // 🔥 use product name
+
+  return StreamBuilder<DocumentSnapshot>(
+    stream: wishlistRef.snapshots(),
+    builder: (context, snapshot) {
+      final isInWishlist = snapshot.hasData && snapshot.data!.exists;
+
+      return OutlinedButton.icon(
+        icon: Icon(
+          isInWishlist ? Icons.favorite : Icons.favorite_border,
+          color: isInWishlist ? Colors.redAccent : (isDark ? Colors.pink[200] : primary),
+        ),
+        label: Text(
+          isInWishlist ? 'Remove from Wishlist' : 'Add to Wishlist',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: isInWishlist ? Colors.redAccent : (isDark ? Colors.grey[100] : primary),
+          ),
+        ),
+        onPressed: () async {
+          if (isInWishlist) {
+            await wishlistRef.delete();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Removed from Wishlist')),
+            );
+          } else {
+            await wishlistRef.set({
+              'name': product!.name,
+              'image': product!.image,
+              'specification': product!.specification,
+              'price': product!.price,
+              'rating': product!.rating,   // stored as string
+              'configuration': product!.configuration,
+              'description': product!.description,
+              'category': product!.category,
+              'quantity': product!.quantity,
+              'timestamp': FieldValue.serverTimestamp(),
+            });
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Added to Wishlist')),
+            );
+          }
+        },
+      );
+    },
+  );
+}
+
 
   Widget _buildRecommendedCard(
     BuildContext context, {
     required String name,
     required double price,
+    required String imageUrl,
   }) {
     final theme = Theme.of(context);
     final primary = theme.colorScheme.primary;
@@ -464,10 +535,18 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
               borderRadius: BorderRadius.circular(12),
             ),
             alignment: Alignment.center,
-            child: Icon(
-              Icons.laptop_chromebook,
-              size: 32,
-              color: isDark ? primary : const Color(0xFFb91c1c),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                imageUrl,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => const Icon(
+                  Icons.broken_image,
+                  size: 40,
+                  color: Colors.grey,
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -479,7 +558,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
           ),
           const Spacer(),
           Text(
-            '\$${price.toStringAsFixed(0)}',
+            '\$${price.toStringAsFixed(0)}', // convert double to string
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           ),
         ],

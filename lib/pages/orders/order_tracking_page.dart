@@ -1,18 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:laptor_harbor/post/orders.dart';
 
-class OrderTrackingPage extends StatelessWidget {
-  const OrderTrackingPage({super.key});
+class OrderTrackingPage extends StatefulWidget {
+  final OrderModel order;
 
+  const OrderTrackingPage({super.key, required this.order});
+
+  @override
+  State<OrderTrackingPage> createState() => _OrderTrackingPageState();
+}
+
+class _OrderTrackingPageState extends State<OrderTrackingPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final primary = theme.colorScheme.primary;
 
-    // In real app these can come from API / order object
-    const orderId = '12345';
-    const total = 2098.0;
-    const status = 'Shipped';
-    const eta = 'Arriving in 2–3 days';
+    final orderId = widget.order.orderId;
+    final total = widget.order.total;
+    final status = widget.order.status;
+
+    // ✅ FIX: define eta
+    final eta = status == 'Delivered'
+        ? 'Order delivered'
+        : status == 'Shipped'
+            ? 'Arriving in 2–3 days'
+            : 'Processing order';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Order Tracking')),
@@ -26,11 +39,9 @@ class OrderTrackingPage extends StatelessWidget {
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [
-                    Color.fromARGB(255, 173, 0, 35), // red
+                    Color.fromARGB(255, 173, 0, 35),
                     Color.fromARGB(255, 110, 2, 18),
                   ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
@@ -97,16 +108,16 @@ class OrderTrackingPage extends StatelessWidget {
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(
+                          children: [
+                            const Icon(
                               Icons.local_shipping_outlined,
                               size: 16,
                               color: Color(0xFFb91c1c),
                             ),
-                            SizedBox(width: 6),
+                            const SizedBox(width: 6),
                             Text(
                               status,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                                 color: Color(0xFFb91c1c),
@@ -153,7 +164,7 @@ class OrderTrackingPage extends StatelessWidget {
                     subtitle: 'We\'ve received your order',
                     isCompleted: true,
                     isCurrent: false,
-                    time: 'Today, 10:30 AM',
+                    time: 'Placed',
                   ),
                   _TrackingDivider(),
                   _TrackingStep(
@@ -161,7 +172,7 @@ class OrderTrackingPage extends StatelessWidget {
                     subtitle: 'Your items are packed and ready',
                     isCompleted: true,
                     isCurrent: false,
-                    time: 'Today, 01:15 PM',
+                    time: 'Packed',
                   ),
                   _TrackingDivider(),
                   _TrackingStep(
@@ -169,15 +180,7 @@ class OrderTrackingPage extends StatelessWidget {
                     subtitle: 'On the way to your city',
                     isCompleted: true,
                     isCurrent: true,
-                    time: 'Today, 05:45 PM',
-                  ),
-                  _TrackingDivider(),
-                  _TrackingStep(
-                    title: 'Out for Delivery',
-                    subtitle: 'Courier will contact you',
-                    isCompleted: false,
-                    isCurrent: false,
-                    time: 'Expected: Tomorrow',
+                    time: 'Shipped',
                   ),
                   _TrackingDivider(),
                   _TrackingStep(
@@ -213,7 +216,6 @@ class OrderTrackingPage extends StatelessWidget {
                   ),
                   TextButton(
                     onPressed: () {
-                      // You can navigate to SupportPage later
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Support clicked (demo)'),

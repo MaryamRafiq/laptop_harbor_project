@@ -1,4 +1,7 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:laptor_harbor/post/posts.dart';
+import 'package:laptor_harbor/services/cart_service.dart';
 import '../product/product_details_page.dart';
 
 class AccessoriesPage extends StatelessWidget {
@@ -6,78 +9,60 @@ class AccessoriesPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List<Map<String, dynamic>> accessories = [
-      {
-        'name': 'Logitech Wireless Mouse',
-        'spec': '2.4 GHz • Silent clicks',
-        'price': '\$39',
-        'rating': 4.6,
-      },
-      {
-        'name': 'Mechanical Keyboard RGB',
-        'spec': 'Blue Switches • RGB',
-        'price': '\$89',
-        'rating': 4.7,
-      },
-      {
-        'name': 'Gaming Headset Pro',
-        'spec': '7.1 Surround • Mic',
-        'price': '\$79',
-        'rating': 4.5,
-      },
-      {
-        'name': 'Laptop Cooling Pad',
-        'spec': '5 Fans • Adjustable',
-        'price': '\$49',
-        'rating': 4.3,
-      },
-      {
-        'name': 'Gaming Headset Pro',
-        'spec': '7.1 Surround • Mic',
-        'price': '\$79',
-        'rating': 4.5,
-      },
-      {
-        'name': 'Laptop Cooling Pad',
-        'spec': '5 Fans • Adjustable',
-        'price': '\$49',
-        'rating': 4.3,
-      },
-    ];
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection("posts")
+          .where("category", isEqualTo: "accessories")
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-    return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      itemCount: accessories.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        // 🔧 more vertical space to avoid overflow
-        childAspectRatio: 0.65,
-      ),
-      itemBuilder: (context, index) {
-        final a = accessories[index];
+        final docs = snapshot.data!.docs;
 
-        return AccessoriesCard(
-          name: a['name'] as String,
-          spec: a['spec'] as String,
-          price: a['price'] as String,
-          rating: (a['rating'] as num).toDouble(),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) =>
-                    ProductDetailsPage(productName: a['name'] as String),
-              ),
-            );
-          },
-          onAddToCart: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('${a['name']} added to cart'),
-                duration: const Duration(seconds: 1),
-              ),
+        // Convert each document into a Post object
+        final posts = docs.map((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+
+           final rawPrice = (data['price'] ?? '0').toString();
+          final numericPrice = double.tryParse(rawPrice.replaceAll(RegExp(r'[^\d.]'), '')) ?? 0.0;
+          return Post(
+            image: data['image'] ?? '',
+            name: data['name'] ?? '',
+            specification: data['specification'] ?? '',
+            price: numericPrice,
+            rating: (data['rating'] ?? '0').toString(),
+            configuration: data['configuration'] ?? '',
+            description: data['description'] ?? '',
+            category: data['category'] ?? 'accessories',
+            quantity: 1, // start with 1
+          );
+        }).toList();
+
+        return GridView.builder(
+          padding: const EdgeInsets.all(12),
+          itemCount: posts.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: 0.65,
+          ),
+          itemBuilder: (context, index) {
+            final post = posts[index];
+
+            return AccessoriesCard(
+              post: post,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        ProductDetailsPage(productName: post.name),
+                  ),
+                );
+              },
             );
           },
         );
@@ -87,22 +72,10 @@ class AccessoriesPage extends StatelessWidget {
 }
 
 class AccessoriesCard extends StatefulWidget {
-  final String name;
-  final String spec;
-  final String price;
-  final double rating;
+  final Post post;
   final VoidCallback? onTap;
-  final VoidCallback? onAddToCart;
 
-  const AccessoriesCard({
-    super.key,
-    required this.name,
-    required this.spec,
-    required this.price,
-    required this.rating,
-    this.onTap,
-    this.onAddToCart,
-  });
+  const AccessoriesCard({super.key, required this.post, this.onTap});
 
   @override
   State<AccessoriesCard> createState() => _AccessoriesCardState();
@@ -140,10 +113,7 @@ class _AccessoriesCardState extends State<AccessoriesCard> {
         child: Container(
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [
-                Color(0xFFfb7185), // soft red
-                Color(0xFFf97316), // orange
-              ],
+              colors: [Color(0xFFfb7185), Color(0xFFf97316)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -166,15 +136,12 @@ class _AccessoriesCardState extends State<AccessoriesCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                /// Top row: chip + heart
+                // Top row: chip + favorite
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3, // 🔧 slightly smaller
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: Colors.red.withOpacity(0.12),
                         borderRadius: BorderRadius.circular(999),
@@ -193,99 +160,90 @@ class _AccessoriesCardState extends State<AccessoriesCard> {
                       child: Icon(
                         _isFavorite ? Icons.favorite : Icons.favorite_border,
                         size: 18,
-                        color: _isFavorite
-                            ? Colors.redAccent
-                            : Colors.grey[500],
+                        color: _isFavorite ? Colors.redAccent : Colors.grey[500],
                       ),
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 6),
 
-                /// Image area
+                // Image
                 Container(
-                  height: 76, // 🔧 slightly reduced
+                  height: 76,
                   decoration: BoxDecoration(
                     color: Colors.red.withOpacity(0.06),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   alignment: Alignment.center,
-                  child: const Icon(
-                    Icons.headphones,
-                    color: Colors.redAccent,
-                    size: 40, // 🔧 slightly reduced
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      widget.post.image,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) =>
+                          const Icon(Icons.broken_image, size: 40, color: Colors.grey),
+                    ),
                   ),
                 ),
-
                 const SizedBox(height: 6),
 
-                /// Name
+                // Name
                 Text(
-                  widget.name,
+                  widget.post.name,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                 ),
-
                 const SizedBox(height: 4),
 
-                /// Specs
+                // Specs
                 Text(
-                  widget.spec,
+                  widget.post.specification,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: Colors.grey[600], fontSize: 12),
                 ),
-
                 const SizedBox(height: 6),
 
-                /// Rating row
+                // Rating row
                 Row(
                   children: [
                     Icon(Icons.star, size: 16, color: Colors.amber.shade700),
                     const SizedBox(width: 4),
-                    Text(
-                      widget.rating.toStringAsFixed(1),
-                      style: const TextStyle(fontSize: 12),
-                    ),
+                    Text(widget.post.rating, style: const TextStyle(fontSize: 12)),
                     const SizedBox(width: 8),
                     const Text('•', style: TextStyle(fontSize: 12)),
                     const SizedBox(width: 4),
                     const Text('In stock', style: TextStyle(fontSize: 11)),
                   ],
                 ),
-
                 const SizedBox(height: 6),
 
-                /// Price + Add to cart button
+                // Price + Add to cart
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      widget.price,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
+                      '\$${widget.post.price}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     TextButton.icon(
-                      onPressed: widget.onAddToCart,
+                      onPressed: () {
+                        // ✅ Use singleton instance
+                        CartService.instance.addItem(widget.post);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('${widget.post.name} added to cart'),
+                            duration: const Duration(seconds: 1),
+                          ),
+                        );
+                      },
                       style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         minimumSize: const Size(0, 0),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      icon: const Icon(
-                        Icons.add_shopping_cart_outlined,
-                        size: 16,
-                      ),
+                      icon: const Icon(Icons.add_shopping_cart_outlined, size: 16),
                       label: const Text('Add', style: TextStyle(fontSize: 12)),
                     ),
                   ],
